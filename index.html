@@ -6,7 +6,7 @@
 <title>Stabilimenti Soglia Superiore — CTR Piemonte</title>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAHLFaPL4b4yib7Cm6QrkssB9nsnCLGHvI",
@@ -74,17 +74,16 @@
     state[r[0]] = { rds: false, imp_rds: "", col_rds: "", imp_151: "", col_151: "" };
   });
 
-  // Dati pre-caricati da screenshot
+  // docs[stabId] = array di {base64, name, mime, _docId}
+  const docs = {};
+
   const seedData = {
     "NA031": { rds: true,  imp_rds: "8346.48", col_rds: "rosso", imp_151: "", col_151: "" },
     "NA024": { rds: true,  imp_rds: "3369.54", col_rds: "verde", imp_151: "", col_151: "" },
     "NA265": { rds: true,  imp_rds: "3336.54", col_rds: "verde", imp_151: "", col_151: "" },
-    "NA300": { rds: false, imp_rds: "RDS 2024", col_rds: "",      imp_151: "", col_151: "" },
+    "NA300": { rds: false, imp_rds: "RDS 2024", col_rds: "",     imp_151: "", col_151: "" },
     "DA058": { rds: true,  imp_rds: "5028.52", col_rds: "rosso", imp_151: "", col_151: "" },
     "DA077": { rds: true,  imp_rds: "8346.48", col_rds: "rosso", imp_151: "", col_151: "" },
-    "DA062": { rds: false, imp_rds: "",         col_rds: "",      imp_151: "", col_151: "" },
-    "NA045": { rds: false, imp_rds: "",         col_rds: "",      imp_151: "", col_151: "" },
-    "NA004": { rds: false, imp_rds: "",         col_rds: "",      imp_151: "", col_151: "" },
     "NA250": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
     "NA094": { rds: false, imp_rds: "5913.80", col_rds: "",      imp_151: "", col_151: "" },
     "NA055": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
@@ -137,7 +136,6 @@
         });
         setStatus("✅ Connesso — dati sincronizzati");
       } else {
-        // Prima volta: carica seed su Firebase
         await setDoc(DOC_REF, state);
         setStatus("✅ Dati iniziali caricati su Firebase");
       }
@@ -153,7 +151,7 @@
         }
       });
     } catch(e) {
-      setStatus("❌ Errore connessione Firebase: " + e.message);
+      setStatus("❌ Errore: " + e.message);
       render();
     }
   }
@@ -168,6 +166,129 @@
       setStatus("❌ Errore salvataggio: " + e.message);
     }
     setTimeout(() => { saving = false; }, 1000);
+  }
+
+  // Salva documento su Firestore — un documento per file, con ID univoco
+  async function saveDoc(stabId, base64, name, mime) {
+    setStatus("💾 Caricamento documento...");
+    try {
+      const docId = `${stabId}_${Date.now()}`;
+      const docRef = doc(db, "documenti", docId);
+      await setDoc(docRef, { base64, name, mime, updatedAt: new Date().toISOString() });
+      if (!docs[stabId]) docs[stabId] = [];
+      docs[stabId].push({ base64, name, mime, _docId: docId });
+      setStatus("✅ Documento salvato — " + new Date().toLocaleTimeString());
+      updateDocCell(stabId);
+    } catch(e) {
+      setStatus("❌ Errore documento: " + e.message);
+      if (e.message && e.message.includes("exceeds")) {
+        alert("File troppo grande per Firestore (limite ~1MB). Usa un file più piccolo.");
+      }
+    }
+  }
+
+  async function deleteDoc(stabId, docId) {
+    try {
+      const docRef = doc(db, "documenti", docId);
+      await setDoc(docRef, { base64: "", name: "", mime: "", updatedAt: "" });
+      docs[stabId] = (docs[stabId] || []).filter(d => d._docId !== docId);
+      updateDocCell(stabId);
+      setStatus("🗑 Documento rimosso");
+    } catch(e) {
+      setStatus("❌ Errore rimozione: " + e.message);
+    }
+  }
+
+  async function loadAllDocs() {
+    try {
+      const snap = await getDocs(collection(db, "documenti"));
+      snap.forEach(d => {
+        const dd = d.data();
+        if (!dd.base64) return;
+        // Ricava stabId togliendo il timestamp finale (es. NA031_1234567890)
+        const parts = d.id.split("_");
+        parts.pop();
+        const stabId = parts.join("_");
+        if (!docs[stabId]) docs[stabId] = [];
+        docs[stabId].push({ ...dd, _docId: d.id });
+      });
+      Object.keys(docs).forEach(id => docs[id].sort((a,b) => a._docId > b._docId ? 1 : -1));
+    } catch(e) { /* nessun documento ancora */ }
+  }
+
+  function updateDocCell(id) {
+    const cell = document.querySelector(`[data-doc-cell="${id}"]`);
+    if (!cell) return;
+    cell.innerHTML = buildDocCell(id);
+    bindDocCell(cell, id);
+  }
+
+  function buildDocCell(id) {
+    const list = docs[id] || [];
+    let html = `<div class="doc-list">`;
+    list.forEach((d, i) => {
+      const isImg = d.mime && d.mime.startsWith("image/");
+      const shortName = d.name && d.name.length > 16 ? d.name.substring(0,14)+"…" : (d.name||"doc");
+      html += `<div class="doc-item">
+        ${isImg
+          ? `<img class="doc-thumb" src="${d.base64}" alt="${d.name}">`
+          : `<div class="doc-pdf-thumb">📄</div>`}
+        <div class="doc-item-actions">
+          <span class="doc-name" title="${d.name}">${shortName}</span>
+          <div style="display:flex;gap:3px;">
+            <button class="doc-view-btn" data-view-id="${id}" data-view-idx="${i}" title="Apri">🔍</button>
+            <button class="doc-del-btn" data-del-stab="${id}" data-del-docid="${d._docId}" title="Rimuovi">🗑</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += `</div>
+    <label class="doc-upload-btn" title="Aggiungi documento">
+      📎 ${list.length === 0 ? "Allega" : "+ Aggiungi"}
+      <input type="file" accept="application/pdf,image/*" style="display:none" data-upload-id="${id}">
+    </label>`;
+    return html;
+  }
+
+  function bindDocCell(cell, id) {
+    const inp = cell.querySelector(`input[data-upload-id]`);
+    if (inp) {
+      inp.addEventListener("change", e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 900000) {
+          alert("File troppo grande (max ~900KB). Comprimi il PDF o ridimensiona l'immagine.");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = ev => saveDoc(id, ev.target.result, file.name, file.type);
+        reader.readAsDataURL(file);
+      });
+    }
+    cell.querySelectorAll("[data-view-id]").forEach(btn => {
+      btn.addEventListener("click", () => openViewer(btn.dataset.viewId, parseInt(btn.dataset.viewIdx)));
+    });
+    cell.querySelectorAll("[data-del-stab]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (confirm("Rimuovere il documento?")) deleteDoc(btn.dataset.delStab, btn.dataset.delDocid);
+      });
+    });
+  }
+
+  function openViewer(id, idx) {
+    const list = docs[id] || [];
+    const d = list[idx];
+    if (!d) return;
+    const overlay = document.getElementById("doc-overlay");
+    const content = document.getElementById("doc-overlay-content");
+    const title = document.getElementById("doc-overlay-title");
+    title.textContent = d.name || "Documento";
+    if (d.mime && d.mime.startsWith("image/")) {
+      content.innerHTML = `<img src="${d.base64}" style="max-width:100%;max-height:80vh;display:block;margin:auto;border-radius:4px;">`;
+    } else {
+      content.innerHTML = `<iframe src="${d.base64}" style="width:100%;height:80vh;border:none;border-radius:4px;"></iframe>`;
+    }
+    overlay.style.display = "flex";
   }
 
   function setStatus(msg) {
@@ -190,7 +311,10 @@
       <div class="imp-wrap">
         <div class="imp-box ${stC}">
           <span class="imp-label">Importo</span>
-          <input class="imp-input" type="text" data-id="${id}" data-col="${col}" value="${val}" placeholder="">
+          <div class="imp-input-row">
+            <span class="imp-euro">€</span>
+            <input class="imp-input" type="text" data-id="${id}" data-col="${col}" value="${val}">
+          </div>
         </div>
         <div class="imp-stato">
           <button class="btn-stato rosso ${rA}" data-id="${id}" data-col="${impCol}" data-val="rosso">✗ Non pag.</button>
@@ -209,7 +333,7 @@
       if (prov !== lastProv) {
         const sep = document.createElement("tr");
         sep.className = "prov-header";
-        sep.innerHTML = `<td colspan="4">📍 ${prov}</td>`;
+        sep.innerHTML = `<td colspan="7">📍 ${prov}</td>`;
         tb.appendChild(sep);
         lastProv = prov;
       }
@@ -223,9 +347,13 @@
         </td>
         <td class="cb-cell"><input type="checkbox" data-id="${id}" data-col="rds" ${s.rds?"checked":""}></td>
         ${impCell(id, "imp_rds", "col_rds")}
+        <td class="doc-cell" data-doc-cell="${id}_rds">${buildDocCell(id+"_rds")}</td>
         ${impCell(id, "imp_151", "col_151")}
+        <td class="doc-cell" data-doc-cell="${id}">${buildDocCell(id)}</td>
       `;
       tb.appendChild(tr);
+      bindDocCell(tr.querySelector(`[data-doc-cell="${id}_rds"]`), id+"_rds");
+      bindDocCell(tr.querySelector(`[data-doc-cell="${id}"]`), id);
     });
 
     tb.querySelectorAll("input[type=checkbox]").forEach(cb => {
@@ -251,6 +379,7 @@
       });
     });
     updateSummary();
+    filterTable();
   }
 
   function updateSummary() {
@@ -272,8 +401,37 @@
     a.click();
   }
 
+  window.filterTable = function() {
+    const q = document.getElementById("searchInput").value.toLowerCase().trim();
+    const rows = document.querySelectorAll("#tbody tr");
+    let lastProvRow = null;
+    rows.forEach(tr => {
+      if (tr.classList.contains("prov-header")) {
+        lastProvRow = tr;
+        tr.style.display = "none";
+      } else {
+        const match = !q || tr.innerText.toLowerCase().includes(q);
+        tr.style.display = match ? "" : "none";
+        if (match && lastProvRow) lastProvRow.style.display = "";
+      }
+    });
+  };
+
+  window.clearSearch = function() {
+    document.getElementById("searchInput").value = "";
+    filterTable();
+  };
+
+  window.closeOverlay = function() {
+    document.getElementById("doc-overlay").style.display = "none";
+    document.getElementById("doc-overlay-content").innerHTML = "";
+  };
+
   window.exportCSV = exportCSV;
-  window.addEventListener("DOMContentLoaded", loadFromFirebase);
+  window.addEventListener("DOMContentLoaded", async () => {
+    await loadAllDocs();
+    await loadFromFirebase();
+  });
 </script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -284,22 +442,30 @@ body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 1.5rem; col
 #status { font-size: 11px; color: #888; margin-top: 4px; }
 .container { background: #fff; border-radius: 8px; border: 1px solid #ddd; overflow: hidden; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
-colgroup col.c-nome { width: 34%; }
-colgroup col.c-data { width: 8%; }
-colgroup col.c-imp  { width: 25%; }
+colgroup col.c-nome { width: 26%; }
+colgroup col.c-data { width: 6%; }
+colgroup col.c-imp  { width: 18%; }
+colgroup col.c-doc  { width: 14%; }
 thead tr.row-group th { font-size: 11px; font-weight: 700; color: #fff; text-align: center; padding: 5px 4px; border-bottom: 1px solid #ddd; }
 thead tr.row-group th.th-nome { background: #555; text-align: left; }
 thead tr.row-group th.th-rds  { background: #185FA5; }
+thead tr.row-group th.th-pag-rds { background: #0d47a1; }
 thead tr.row-group th.th-151  { background: #6a1b9a; }
+thead tr.row-group th.th-doc  { background: #2e7d32; }
 thead tr.row-sub th { font-size: 13px; font-weight: 600; color: #555; text-align: center; padding: 5px 4px; border-bottom: 2px solid #ccc; background: #f7f7f7; }
 thead tr.row-sub th.th-nome { text-align: center; background: #f0f0f0; }
 tbody tr { border-bottom: 1px solid #eee; }
 tbody tr:hover { background: #fafafa; }
 tbody td { padding: 6px 4px; vertical-align: middle; }
 tbody td.cb-cell { text-align: center; vertical-align: middle; }
+tbody td.doc-cell { vertical-align: middle; padding: 4px; }
 input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #185FA5; display: block; margin: 0 auto; }
 .imp-wrap { display: flex; flex-direction: column; gap: 3px; }
-.imp-box { border: 1px solid #ccc; border-radius: 4px; padding: 3px 6px 4px 6px; min-height: 36px; background: #fafafa; transition: border-color 0.2s, background 0.2s; }
+.imp-box { border: 1px solid #ccc; border-radius: 4px; padding: 3px 6px 4px 6px; min-height: 36px; background: #fafafa; transition: border-color 0.2s, background 0.2s; display: flex; flex-direction: column; }
+.imp-input-row { display: flex; align-items: center; gap: 3px; }
+.imp-euro { font-size: 13px; font-weight: 600; color: #aaa; line-height: 1; flex-shrink: 0; }
+.imp-box.stato-rosso .imp-euro { color: #c62828; }
+.imp-box.stato-verde .imp-euro { color: #2e7d32; }
 .imp-box.stato-rosso { border-color: #c62828; background: #fff5f5; }
 .imp-box.stato-verde { border-color: #2e7d32; background: #f2faf2; }
 .imp-label { display: block; font-size: 9px; color: #bbb; line-height: 1; margin-bottom: 2px; }
@@ -324,15 +490,54 @@ button.btn-csv { font-size: 11px; padding: 4px 12px; cursor: pointer; border-rad
 button.btn-csv:hover { background: #f0f0f0; }
 .btn-print { font-size: 14px; font-weight: 600; padding: 8px 20px; background: #185FA5; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
 .btn-print:hover { background: #0f4a85; }
+.search-bar { margin-bottom: 0.75rem; display: flex; align-items: center; gap: 8px; }
+.search-bar input { flex: 1; padding: 7px 12px; font-size: 13px; border: 1px solid #ccc; border-radius: 6px; outline: none; }
+.search-bar input:focus { border-color: #185FA5; box-shadow: 0 0 0 2px rgba(24,95,165,0.15); }
+.search-bar .clear-btn { font-size: 12px; padding: 6px 10px; cursor: pointer; border-radius: 5px; border: 1px solid #ccc; background: #fff; color: #888; }
+
+/* DOCUMENTI */
+.doc-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.doc-item { display: flex; align-items: center; gap: 5px; background: #f5f5f5; border-radius: 4px; padding: 3px 5px; border: 1px solid #e0e0e0; }
+.doc-thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
+.doc-pdf-thumb { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.doc-item-actions { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.doc-upload-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 4px 8px; border-radius: 5px; border: 1px dashed #aaa; background: #f9f9f9; color: #555; cursor: pointer; white-space: nowrap; }
+.doc-upload-btn:hover { background: #eef4ff; border-color: #185FA5; color: #185FA5; }
+.doc-name { font-size: 10px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.doc-view-btn, .doc-del-btn { font-size: 11px; border: none; background: none; cursor: pointer; padding: 1px 3px; border-radius: 3px; }
+.doc-del-btn { font-size: 15px; margin-left: 4px; }
+.doc-view-btn:hover { background: #e3f0ff; }
+.doc-del-btn:hover { background: #ffeaea; }
+
+/* OVERLAY VISUALIZZATORE */
+#doc-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9999; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+#doc-overlay-box { background: #fff; border-radius: 8px; padding: 1rem; width: 90vw; max-width: 900px; }
+#doc-overlay-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+#doc-overlay-title { font-size: 14px; font-weight: 600; color: #333; }
+#doc-overlay-close { font-size: 20px; cursor: pointer; border: none; background: none; color: #666; line-height: 1; }
+#doc-overlay-close:hover { color: #c00; }
+
 @media print {
   body { background: #fff; padding: 0; }
-  .btn-print, .btn-csv, .imp-stato { display: none; }
+  .btn-print, .btn-csv, .imp-stato, .search-bar, .doc-cell { display: none; }
   .container { border: none; }
   .imp-box { border: 1px solid #999; background: #fff; }
 }
 </style>
 </head>
 <body>
+
+<!-- OVERLAY VISUALIZZATORE DOCUMENTI -->
+<div id="doc-overlay" onclick="if(event.target===this)closeOverlay()">
+  <div id="doc-overlay-box">
+    <div id="doc-overlay-header">
+      <span id="doc-overlay-title"></span>
+      <button id="doc-overlay-close" onclick="closeOverlay()">✕</button>
+    </div>
+    <div id="doc-overlay-content"></div>
+  </div>
+</div>
+
 <div class="header">
   <div style="display:flex; justify-content:space-between; align-items:center;">
     <div>
@@ -344,22 +549,33 @@ button.btn-csv:hover { background: #f0f0f0; }
   </div>
 </div>
 
+<div class="search-bar">
+  <input type="text" id="searchInput" placeholder="🔍 Cerca stabilimento o provincia..." oninput="filterTable()">
+  <button class="clear-btn" onclick="clearSearch()">✕ Cancella</button>
+</div>
+
 <div class="container">
 <table>
   <colgroup>
     <col class="c-nome">
     <col class="c-data"><col class="c-imp">
+    <col class="c-doc">
     <col class="c-imp">
+    <col class="c-doc">
   </colgroup>
   <thead>
     <tr class="row-group">
       <th class="th-nome" rowspan="2">Nome stabilimento</th>
       <th class="th-rds" colspan="2">RdS 2026 — Pagamento 105/2015</th>
+      <th class="th-pag-rds">Pagamento RdS</th>
       <th class="th-151">Pagamento 151/2011</th>
+      <th class="th-doc">Documenti</th>
     </tr>
     <tr class="row-sub">
       <th class="th-nome" style="text-align:center;">Ricevuto</th><th>Importo</th>
+      <th>PDF / Immagine</th>
       <th>Importo</th>
+      <th>PDF / Immagine</th>
     </tr>
   </thead>
   <tbody id="tbody"></tbody>
