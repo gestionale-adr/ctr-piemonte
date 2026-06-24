@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stabilimenti Soglia Superiore — CTR Piemonte</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAHLFaPL4b4yib7Cm6QrkssB9nsnCLGHvI",
+    authDomain: "ctr-piemonte.firebaseapp.com",
+    projectId: "ctr-piemonte",
+    storageBucket: "ctr-piemonte.firebasestorage.app",
+    messagingSenderId: "784012401863",
+    appId: "1:784012401863:web:77e4a198b76503bac172e2"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const DOC_REF = doc(db, "stabilimenti", "soglia_superiore");
+
+  const data = [
+    ["NA031","ARKEMA S.R.L.","5","ALESSANDRIA","ALESSANDRIA"],
+    ["NA024","AUTOSPED S.R.L.","1","TORTONA","ALESSANDRIA"],
+    ["NA265","BOERO BARTOLOMEO S.P.A. (1)","1","TORTONA","ALESSANDRIA"],
+    ["NA300","BOERO BARTOLOMEO S.P.A. (2)","5","TORTONA","ALESSANDRIA"],
+    ["DA058","CONSORZIO NOVIGAS","3","NOVI LIGURE","ALESSANDRIA"],
+    ["DA077","ELANTAS Europe s.r.l.","5","QUATTORDIO","ALESSANDRIA"],
+    ["DA062","ICE S.p.A. (Ex PCA S.p.A.)","5","BASALUZZO","ALESSANDRIA"],
+    ["NA045","INTER.E.M. SRL","1","MURISENGO","ALESSANDRIA"],
+    ["NA004","LAMBERTI S.P.A.","5","VIGUZZOLO","ALESSANDRIA"],
+    ["NA250","METLAC S.P.A.","5","BOSCO MARENGO","ALESSANDRIA"],
+    ["NA094","NOBEL SPORT MARTIGNONI","4","TORTONA","ALESSANDRIA"],
+    ["NA055","PPG INDUSTRIES ITALIA SRL","5","QUATTORDIO","ALESSANDRIA"],
+    ["NA263","POLIRESIN S.R.L.","4","POZZOLO FORMIGARO","ALESSANDRIA"],
+    ["NA008","SIGEMI SRL","4","ARQUATA SCRIVIA","ALESSANDRIA"],
+    ["NA011","SYENSQO SPECIALTY POLYMERS ITALY S.P.A.","5","ALESSANDRIA","ALESSANDRIA"],
+    ["DA034","TAZZETTI S.P.A.","4","CASALE MONFERRATO","ALESSANDRIA"],
+    ["NA253","ENERGAS S.P.A.","1","REVIGLIASCO D'ASTI","ASTI"],
+    ["DA040","ILARIO ORMEZZANO SAI S.R.L.","1","GAGLIANICO","BIELLA"],
+    ["NA252","ITAFERT SRL","1","CANALE","CUNEO"],
+    ["NA092","MICHELIN ITALIANA S.P.A.","5","CUNEO","CUNEO"],
+    ["NA087","PRAVISANI SPA","1","IGLIANO","CUNEO"],
+    ["NA002","BALCHEM ITALIA S.R.L.","4","MARANO TICINO","NOVARA"],
+    ["NA009","ESSECO SRL","5","Trecate","NOVARA"],
+    ["DA024","EV PRODUZIONE S.R.L.","5","Trecate","NOVARA"],
+    ["DA056","LIQUIGAS SPA","1","Trecate","NOVARA"],
+    ["NA023","MACDERMID PERFORMANCE SOLUTIONS ITALIANA SRL","5","TRECATE","NOVARA"],
+    ["DA061","PROCOS SPA","5","CAMERI","NOVARA"],
+    ["NA030","RADICI CHIMICA S.P.A","5","NOVARA","NOVARA"],
+    ["NA012","SARPOM S.R.L.","5","TRECATE","NOVARA"],
+    ["DA078","TAMOIL ITALIA SPA","1","Trecate","NOVARA"],
+    ["NA014","TI-GAS S.R.L.","1","TRECATE","NOVARA"],
+    ["NA313","TRASGO S.r.l.","1","San Pietro Mosezzo","NOVARA"],
+    ["NA003","AGN ENERGIA S.P.A.","1","VOLPIANO","TORINO"],
+    ["NA051","AHLSTROM-MUNKSJO ITALIA SPA","5","MATHI","TORINO"],
+    ["NA005","BUTANGAS S.P.A.","1","VOLPIANO","TORINO"],
+    ["DA017","CARMAGNANI PIEMONTE S.P.A.","1","GRUGLIASCO","TORINO"],
+    ["NA001","ENI INDUSTRIAL EVOLUTION S.P.A.","1","VOLPIANO","TORINO"],
+    ["DA003b","ENI SPA ENERGY EVOLUTION REFINING EVOLUTION & TRANSFORMATION","5","ROBASSOMERO","TORINO"],
+    ["DA027","ESE S.R.L","1","CHIVASSO","TORINO"],
+    ["NA015","TAZZETTI S.p.A. (ex LIQUIGAS SPA)","1","VOLPIANO","TORINO"],
+    ["NA308","TAZZETTI S.P.A. (2)","1","VOLPIANO","TORINO"],
+    ["NA007","ALTAIR CHEMICAL SRL","5","VERBANIA","VCO"],
+    ["DA082","VINAVIL SPA","5","VILLADOSSOLA","VCO"],
+    ["NA029","ALCOPLAST S.R.L.","5","VERCELLI","VERCELLI"],
+    ["DA083","ZSCHIMMER & SCHWARZ ITALIANA S.P.A.","5","TRICERRO","VERCELLI"],
+  ];
+
+  const state = {};
+  data.forEach(r => {
+    state[r[0]] = { rds: false, imp_rds: "", col_rds: "", imp_151: "", col_151: "" };
+  });
+
+  // Dati pre-caricati da screenshot
+  const seedData = {
+    "NA031": { rds: true,  imp_rds: "8346.48", col_rds: "rosso", imp_151: "", col_151: "" },
+    "NA024": { rds: true,  imp_rds: "3369.54", col_rds: "verde", imp_151: "", col_151: "" },
+    "NA265": { rds: true,  imp_rds: "3336.54", col_rds: "verde", imp_151: "", col_151: "" },
+    "NA300": { rds: false, imp_rds: "RDS 2024", col_rds: "",      imp_151: "", col_151: "" },
+    "DA058": { rds: true,  imp_rds: "5028.52", col_rds: "rosso", imp_151: "", col_151: "" },
+    "DA077": { rds: true,  imp_rds: "8346.48", col_rds: "rosso", imp_151: "", col_151: "" },
+    "DA062": { rds: false, imp_rds: "",         col_rds: "",      imp_151: "", col_151: "" },
+    "NA045": { rds: false, imp_rds: "",         col_rds: "",      imp_151: "", col_151: "" },
+    "NA004": { rds: false, imp_rds: "",         col_rds: "",      imp_151: "", col_151: "" },
+    "NA250": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "NA094": { rds: false, imp_rds: "5913.80", col_rds: "",      imp_151: "", col_151: "" },
+    "NA055": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "NA263": { rds: false, imp_rds: "RDS 2025", col_rds: "",     imp_151: "", col_151: "" },
+    "NA008": { rds: false, imp_rds: "5913.80", col_rds: "",      imp_151: "", col_151: "" },
+    "NA011": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA034": { rds: false, imp_rds: "5913.80", col_rds: "",      imp_151: "", col_151: "" },
+    "NA253": { rds: false, imp_rds: "RDS 2024", col_rds: "",     imp_151: "", col_151: "" },
+    "DA040": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA252": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA092": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "NA087": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA002": { rds: false, imp_rds: "5913.80", col_rds: "",      imp_151: "", col_151: "" },
+    "NA009": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA024": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA056": { rds: false, imp_rds: "RDS 2022", col_rds: "",     imp_151: "", col_151: "" },
+    "NA023": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA061": { rds: false, imp_rds: "RDS 2023", col_rds: "",     imp_151: "", col_151: "" },
+    "NA030": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "NA012": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA078": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA014": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA313": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA003": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA051": { rds: false, imp_rds: "RDS 2027", col_rds: "",     imp_151: "", col_151: "" },
+    "NA005": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "DA017": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA001": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "DA003b":{ rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA027": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA015": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA308": { rds: false, imp_rds: "3336.54", col_rds: "",      imp_151: "", col_151: "" },
+    "NA007": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA082": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "NA029": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+    "DA083": { rds: false, imp_rds: "8346.48", col_rds: "",      imp_151: "", col_151: "" },
+  };
+  Object.keys(seedData).forEach(id => { if (state[id]) Object.assign(state[id], seedData[id]); });
+
+  let saving = false;
+
+  async function loadFromFirebase() {
+    setStatus("🔄 Connessione a Firebase...");
+    try {
+      const snap = await getDoc(DOC_REF);
+      if (snap.exists()) {
+        const remote = snap.data();
+        Object.keys(remote).forEach(id => {
+          if (state[id]) Object.assign(state[id], remote[id]);
+        });
+        setStatus("✅ Connesso — dati sincronizzati");
+      } else {
+        // Prima volta: carica seed su Firebase
+        await setDoc(DOC_REF, state);
+        setStatus("✅ Dati iniziali caricati su Firebase");
+      }
+      render();
+      onSnapshot(DOC_REF, (snap) => {
+        if (!saving && snap.exists()) {
+          const remote = snap.data();
+          Object.keys(remote).forEach(id => {
+            if (state[id]) Object.assign(state[id], remote[id]);
+          });
+          render();
+          setStatus("🔄 Aggiornato — " + new Date().toLocaleTimeString());
+        }
+      });
+    } catch(e) {
+      setStatus("❌ Errore connessione Firebase: " + e.message);
+      render();
+    }
+  }
+
+  async function saveToFirebase() {
+    saving = true;
+    setStatus("💾 Salvataggio...");
+    try {
+      await setDoc(DOC_REF, state);
+      setStatus("✅ Salvato — " + new Date().toLocaleTimeString());
+    } catch(e) {
+      setStatus("❌ Errore salvataggio: " + e.message);
+    }
+    setTimeout(() => { saving = false; }, 1000);
+  }
+
+  function setStatus(msg) {
+    const el = document.getElementById("status");
+    if (el) el.textContent = msg;
+  }
+
+  function clClass(cl) {
+    return cl==="5"?"cl5":cl==="4"?"cl4":cl==="3"?"cl3":"cl1";
+  }
+
+  function impCell(id, col, impCol) {
+    const s = state[id];
+    const val = s[col] || "";
+    const color = s[impCol] || "";
+    const stC = color === "rosso" ? "stato-rosso" : color === "verde" ? "stato-verde" : "";
+    const rA = color === "rosso" ? "active" : "";
+    const gA = color === "verde" ? "active" : "";
+    return `<td>
+      <div class="imp-wrap">
+        <div class="imp-box ${stC}">
+          <span class="imp-label">Importo</span>
+          <input class="imp-input" type="text" data-id="${id}" data-col="${col}" value="${val}" placeholder="">
+        </div>
+        <div class="imp-stato">
+          <button class="btn-stato rosso ${rA}" data-id="${id}" data-col="${impCol}" data-val="rosso">✗ Non pag.</button>
+          <button class="btn-stato verde ${gA}" data-id="${id}" data-col="${impCol}" data-val="verde">✓ Pagato</button>
+        </div>
+      </div>
+    </td>`;
+  }
+
+  function render() {
+    const tb = document.getElementById("tbody");
+    if (!tb) return;
+    tb.innerHTML = "";
+    let lastProv = null;
+    data.forEach(([id, nome, cl, comune, prov]) => {
+      if (prov !== lastProv) {
+        const sep = document.createElement("tr");
+        sep.className = "prov-header";
+        sep.innerHTML = `<td colspan="4">📍 ${prov}</td>`;
+        tb.appendChild(sep);
+        lastProv = prov;
+      }
+      const s = state[id];
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <span class="badge ${clClass(cl)}">${id.replace('b','')} · Cl.${cl}</span>
+          <span class="nome">${nome}</span>
+          <div class="sub-loc">${comune} (${prov})</div>
+        </td>
+        <td class="cb-cell"><input type="checkbox" data-id="${id}" data-col="rds" ${s.rds?"checked":""}></td>
+        ${impCell(id, "imp_rds", "col_rds")}
+        ${impCell(id, "imp_151", "col_151")}
+      `;
+      tb.appendChild(tr);
+    });
+
+    tb.querySelectorAll("input[type=checkbox]").forEach(cb => {
+      cb.addEventListener("change", e => {
+        const { id, col } = e.target.dataset;
+        state[id][col] = e.target.checked;
+        saveToFirebase(); updateSummary();
+      });
+    });
+    tb.querySelectorAll("input.imp-input").forEach(inp => {
+      inp.addEventListener("change", e => {
+        const { id, col } = e.target.dataset;
+        state[id][col] = e.target.value;
+        saveToFirebase();
+      });
+    });
+    tb.querySelectorAll("button.btn-stato").forEach(btn => {
+      btn.addEventListener("click", e => {
+        const { id, col, val } = e.target.dataset;
+        state[id][col] = state[id][col] === val ? "" : val;
+        saveToFirebase();
+        render();
+      });
+    });
+    updateSummary();
+  }
+
+  function updateSummary() {
+    let rds = 0;
+    Object.values(state).forEach(s => { if(s.rds) rds++; });
+    const el = document.getElementById("summary");
+    if (el) el.textContent = `${rds} / 45 con RdS ricevuta`;
+  }
+
+  function exportCSV() {
+    let csv = "N. Univoco,Nome,Classe,Comune,Provincia,RdS,Imp.RdS,Imp.151\n";
+    data.forEach(([id,nome,cl,comune,prov]) => {
+      const s = state[id];
+      csv += `"${id.replace('b','')}","${nome}","${cl}","${comune}","${prov}",${s.rds?1:0},"${s.imp_rds}","${s.imp_151}"\n`;
+    });
+    const a = document.createElement("a");
+    a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+    a.download = "stabilimenti_soglia_superiore_2026.csv";
+    a.click();
+  }
+
+  window.exportCSV = exportCSV;
+  window.addEventListener("DOMContentLoaded", loadFromFirebase);
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 1.5rem; color: #1a1a1a; }
+.header { padding: 1rem 0 0.75rem; border-bottom: 1px solid #ddd; margin-bottom: 1rem; }
+.header h1 { font-size: 16px; font-weight: 600; }
+.header p { font-size: 12px; color: #666; margin-top: 3px; }
+#status { font-size: 11px; color: #888; margin-top: 4px; }
+.container { background: #fff; border-radius: 8px; border: 1px solid #ddd; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+colgroup col.c-nome { width: 34%; }
+colgroup col.c-data { width: 8%; }
+colgroup col.c-imp  { width: 25%; }
+thead tr.row-group th { font-size: 11px; font-weight: 700; color: #fff; text-align: center; padding: 5px 4px; border-bottom: 1px solid #ddd; }
+thead tr.row-group th.th-nome { background: #555; text-align: left; }
+thead tr.row-group th.th-rds  { background: #185FA5; }
+thead tr.row-group th.th-151  { background: #6a1b9a; }
+thead tr.row-sub th { font-size: 13px; font-weight: 600; color: #555; text-align: center; padding: 5px 4px; border-bottom: 2px solid #ccc; background: #f7f7f7; }
+thead tr.row-sub th.th-nome { text-align: center; background: #f0f0f0; }
+tbody tr { border-bottom: 1px solid #eee; }
+tbody tr:hover { background: #fafafa; }
+tbody td { padding: 6px 4px; vertical-align: middle; }
+tbody td.cb-cell { text-align: center; vertical-align: middle; }
+input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #185FA5; display: block; margin: 0 auto; }
+.imp-wrap { display: flex; flex-direction: column; gap: 3px; }
+.imp-box { border: 1px solid #ccc; border-radius: 4px; padding: 3px 6px 4px 6px; min-height: 36px; background: #fafafa; transition: border-color 0.2s, background 0.2s; }
+.imp-box.stato-rosso { border-color: #c62828; background: #fff5f5; }
+.imp-box.stato-verde { border-color: #2e7d32; background: #f2faf2; }
+.imp-label { display: block; font-size: 9px; color: #bbb; line-height: 1; margin-bottom: 2px; }
+.imp-input { width: 100%; border: none; background: transparent; font-size: 15px; font-weight: 600; color: #333; outline: none; padding: 0; text-align: center; }
+.imp-box.stato-rosso .imp-input { color: #c62828; }
+.imp-box.stato-verde .imp-input { color: #2e7d32; }
+.imp-stato { display: flex; gap: 3px; }
+.btn-stato { flex: 1; font-size: 9px; font-weight: 700; padding: 2px 0; border-radius: 3px; border: 1px solid #ccc; background: #f0f0f0; color: #888; cursor: pointer; text-align: center; line-height: 1.2; }
+.btn-stato.rosso.active { background: #c62828; color: #fff; border-color: #c62828; }
+.btn-stato.verde.active { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+.btn-stato:not(.active):hover { background: #e0e0e0; }
+.badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; margin-right: 4px; border: 1px solid; }
+.cl5 { background: #FAECE7; color: #4A1B0C; border-color: #f0b09a; }
+.cl4 { background: #FAEEDA; color: #412402; border-color: #efc97a; }
+.cl3 { background: #EAF3DE; color: #173404; border-color: #a8d06e; }
+.cl1 { background: #E6F1FB; color: #042C53; border-color: #85b7eb; }
+.nome { font-size: 12px; }
+.sub-loc { font-size: 10px; color: #999; margin-top: 1px; }
+.prov-header td { background: #e8eef5; font-size: 11px; font-weight: 700; color: #185FA5; padding: 4px 10px; letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid #c5d5e8; }
+.footer { padding: 0.6rem 1rem; background: #f9f9f9; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #666; }
+button.btn-csv { font-size: 11px; padding: 4px 12px; cursor: pointer; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
+button.btn-csv:hover { background: #f0f0f0; }
+.btn-print { font-size: 14px; font-weight: 600; padding: 8px 20px; background: #185FA5; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+.btn-print:hover { background: #0f4a85; }
+@media print {
+  body { background: #fff; padding: 0; }
+  .btn-print, .btn-csv, .imp-stato { display: none; }
+  .container { border: none; }
+  .imp-box { border: 1px solid #999; background: #fff; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div>
+      <h1>🏭 Stabilimenti RIR Piemonte — Soglia Superiore</h1>
+      <p>CTR Piemonte — Direzione Regionale VVF — D.Lgs. 105/2015 — 45 stabilimenti</p>
+      <div id="status">🔄 Connessione in corso...</div>
+    </div>
+    <button class="btn-print" onclick="window.print()">🖨 Stampa</button>
+  </div>
+</div>
+
+<div class="container">
+<table>
+  <colgroup>
+    <col class="c-nome">
+    <col class="c-data"><col class="c-imp">
+    <col class="c-imp">
+  </colgroup>
+  <thead>
+    <tr class="row-group">
+      <th class="th-nome" rowspan="2">Nome stabilimento</th>
+      <th class="th-rds" colspan="2">RdS 2026 — Pagamento 105/2015</th>
+      <th class="th-151">Pagamento 151/2011</th>
+    </tr>
+    <tr class="row-sub">
+      <th class="th-nome" style="text-align:center;">Ricevuto</th><th>Importo</th>
+      <th>Importo</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+<div class="footer">
+  <span id="summary">—</span>
+  <button class="btn-csv" onclick="exportCSV()">⬇ Esporta CSV</button>
+</div>
+</div>
+</body>
+</html>
